@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::models::{Context, TaskDetails, TaskStatus};
-use crate::repository::FinishDayResult;
+use crate::repository::FinishSessionResult;
 
 pub fn json<T: Serialize>(value: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
@@ -68,7 +68,7 @@ pub fn context(context: &Context) {
     list("Backburner", &backburner);
 }
 
-pub fn finish_day(result: &FinishDayResult) {
+pub fn finish_session(result: &FinishSessionResult) {
     println!(
         "Archived {} completed task(s). Moved {} unfinished task(s) to Backburner.",
         result.archived, result.backburnered

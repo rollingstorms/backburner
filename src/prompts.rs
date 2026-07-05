@@ -13,11 +13,12 @@ pub fn print_prompt(name: &str) -> Result<()> {
 
 const SESSION_START: &str = r#"Read `bb context --json`.
 Summarize the active project memory that is relevant to the user's current request.
+When the request implies concrete session work, create or update Today items with useful evidence.
 Use Backburner items only when they help the requested work.
 Do not expand scope just because a task exists."#;
 
 const SESSION_END: &str = r#"Review the current work, git diff, terminal output, and conversation.
-Create or update Backburner items for unfinished but important work.
+Mark completed Today items done, and create or update Today items for unfinished session work before running `bb finish-session`.
 Include file refs, commands, and short notes when they make the work easier to resume.
 Only mark items done when code or test evidence supports it."#;
 

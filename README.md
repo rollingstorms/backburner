@@ -3,9 +3,9 @@
 Private project memory for work worth coming back to.
 
 Backburner CLI stores tasks locally inside a git repository. It is intentionally
-small: tasks live in `today`, `backburner`, or `archived`; completed Today tasks
-archive when you run `bb finish-day`; unfinished Today tasks return to the
-Backburner.
+small: tasks live in `today`, `backburner`, or `archived`. Treat `today` as the
+active session list: completed Today tasks archive when you run
+`bb finish-session`; unfinished Today tasks return to the Backburner.
 
 ## Install for Development
 
@@ -38,11 +38,11 @@ bb undone 1
 bb move 1 today
 bb plan 1 tomorrow
 bb note 1 "Only fails after token expiry."
-bb finish-day
+bb finish-session
 ```
 
 `bb add` defaults to Backburner so capturing an idea does not interrupt the
-current task.
+current session. Use `--today` when a task belongs in the active working set.
 
 ## Evidence
 

@@ -191,10 +191,10 @@ impl Repository {
         Ok(())
     }
 
-    pub fn finish_day(&mut self) -> Result<FinishDayResult> {
+    pub fn finish_session(&mut self) -> Result<FinishSessionResult> {
         let today = self.list_tasks_only(TaskStatus::Today)?;
         if today.is_empty() {
-            return Ok(FinishDayResult::default());
+            return Ok(FinishSessionResult::default());
         }
         let mut archived = 0;
         let mut backburnered = 0;
@@ -229,7 +229,7 @@ impl Repository {
             }
         }
         tx.commit()?;
-        Ok(FinishDayResult {
+        Ok(FinishSessionResult {
             archived,
             backburnered,
         })
@@ -262,7 +262,7 @@ impl Repository {
             tx.execute(
                 r#"
                 update tasks
-                set status = 'today', updated_at = ?1, completed_at = null,
+                set status = 'today', planned_date_key = null, updated_at = ?1, completed_at = null,
                     archived_at = null, sort_order = ?2
                 where id = ?3
                 "#,
@@ -395,7 +395,7 @@ impl Repository {
 
 #[derive(Debug, Default, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FinishDayResult {
+pub struct FinishSessionResult {
     pub archived: usize,
     pub backburnered: usize,
 }

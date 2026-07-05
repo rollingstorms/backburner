@@ -148,12 +148,12 @@ fn run_project_command(command: Command) -> Result<()> {
             println!("Deleted #{}.", args.id);
             Ok(())
         }
-        Command::FinishDay(args) => {
-            let result = repository.finish_day()?;
+        Command::FinishSession(args) => {
+            let result = repository.finish_session()?;
             if args.json {
                 output::json(&result)
             } else {
-                output::finish_day(&result);
+                output::finish_session(&result);
                 Ok(())
             }
         }

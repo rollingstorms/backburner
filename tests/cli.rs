@@ -28,6 +28,10 @@ fn json_output(assert: assert_cmd::assert::Assert) -> Value {
     serde_json::from_slice(&output).expect("json output")
 }
 
+fn init(dir: &TempDir) {
+    bb(dir).arg("init").assert().success();
+}
+
 #[test]
 fn init_creates_private_project_store() {
     let dir = repo();
@@ -43,9 +47,25 @@ fn init_creates_private_project_store() {
 }
 
 #[test]
+fn init_json_reports_project_paths() {
+    let dir = repo();
+
+    let value = json_output(bb(&dir).args(["init", "--json"]).assert());
+    let root = dir.path().canonicalize().expect("canonical root");
+
+    assert_eq!(value["root"], root.to_string_lossy().as_ref());
+    assert!(
+        value["database"]
+            .as_str()
+            .unwrap()
+            .ends_with(".backburner/backburner.db")
+    );
+}
+
+#[test]
 fn add_defaults_to_backburner_and_today_flag_uses_today() {
     let dir = repo();
-    bb(&dir).arg("init").assert().success();
+    init(&dir);
 
     bb(&dir).args(["add", "Remember this"]).assert().success();
     bb(&dir)
@@ -66,9 +86,9 @@ fn add_defaults_to_backburner_and_today_flag_uses_today() {
 }
 
 #[test]
-fn done_and_finish_day_preserve_backburner_rules() {
+fn done_and_finish_session_preserves_backburner_rules() {
     let dir = repo();
-    bb(&dir).arg("init").assert().success();
+    init(&dir);
     bb(&dir)
         .args(["add", "Complete me", "--today"])
         .assert()
@@ -84,7 +104,7 @@ fn done_and_finish_day_preserve_backburner_rules() {
             .and(predicate::str::contains("[ ] #2 Carry me over")),
     );
 
-    let result = json_output(bb(&dir).args(["finish-day", "--json"]).assert());
+    let result = json_output(bb(&dir).args(["finish-session", "--json"]).assert());
     assert_eq!(result["archived"], 1);
     assert_eq!(result["backburnered"], 1);
 
@@ -103,7 +123,7 @@ fn done_and_finish_day_preserve_backburner_rules() {
 #[test]
 fn planned_backburner_tasks_promote_when_reading_today() {
     let dir = repo();
-    bb(&dir).arg("init").assert().success();
+    init(&dir);
     let tomorrow = (Local::now().date_naive() + Days::new(1))
         .format("%Y-%m-%d")
         .to_string();
@@ -131,9 +151,56 @@ fn planned_backburner_tasks_promote_when_reading_today() {
 }
 
 #[test]
+fn promoted_unfinished_tasks_stay_backburnered_after_finish_session() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .args(["add", "Due but unfinished", "--plan", "today"])
+        .assert()
+        .success();
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Due but unfinished"));
+
+    let result = json_output(bb(&dir).args(["finish-session", "--json"]).assert());
+    assert_eq!(result["archived"], 0);
+    assert_eq!(result["backburnered"], 1);
+
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing here."));
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Due but unfinished"));
+}
+
+#[test]
+fn finish_day_remains_supported_as_alias() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .args(["add", "Alias complete", "--today"])
+        .assert()
+        .success();
+    bb(&dir).args(["done", "1"]).assert().success();
+
+    let result = json_output(bb(&dir).args(["finish-day", "--json"]).assert());
+    assert_eq!(result["archived"], 1);
+    assert_eq!(result["backburnered"], 0);
+}
+
+#[test]
 fn show_json_includes_evidence() {
     let dir = repo();
-    bb(&dir).arg("init").assert().success();
+    init(&dir);
     let value = json_output(
         bb(&dir)
             .args([
@@ -163,9 +230,143 @@ fn show_json_includes_evidence() {
 }
 
 #[test]
+fn list_commands_support_json_output() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Today item", "--today"])
+        .assert()
+        .success();
+    bb(&dir).args(["add", "Backburner item"]).assert().success();
+    bb(&dir)
+        .args(["add", "Archived item", "--today"])
+        .assert()
+        .success();
+    bb(&dir).args(["move", "3", "archive"]).assert().success();
+
+    let today = json_output(bb(&dir).args(["today", "--json"]).assert());
+    assert_eq!(today.as_array().unwrap().len(), 1);
+    assert_eq!(today[0]["task"]["title"], "Today item");
+
+    let backburner = json_output(bb(&dir).args(["backburner", "--json"]).assert());
+    assert_eq!(backburner.as_array().unwrap().len(), 1);
+    assert_eq!(backburner[0]["task"]["title"], "Backburner item");
+
+    let archive = json_output(bb(&dir).args(["archive", "--json"]).assert());
+    assert_eq!(archive.as_array().unwrap().len(), 1);
+    assert_eq!(archive[0]["task"]["title"], "Archived item");
+}
+
+#[test]
+fn show_human_output_includes_task_details() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args([
+            "add",
+            "Inspect output",
+            "--today",
+            "--file",
+            "src/main.rs:10",
+            "--cmd",
+            "cargo test",
+            "--note",
+            "Remember the edge case.",
+        ])
+        .assert()
+        .success();
+
+    bb(&dir)
+        .args(["show", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Inspect output"))
+        .stdout(predicate::str::contains("Status: today"))
+        .stdout(predicate::str::contains("Remember the edge case."))
+        .stdout(predicate::str::contains("src/main.rs:10"))
+        .stdout(predicate::str::contains("cargo test"));
+}
+
+#[test]
+fn note_plan_move_undone_and_delete_commands_mutate_tasks() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Mutable task", "--today"])
+        .assert()
+        .success();
+
+    bb(&dir)
+        .args(["note", "1", "Added after creation.", "--source", "agent"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Added note to #1."));
+    bb(&dir)
+        .args(["plan", "1", "tomorrow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated plan for #1."));
+    bb(&dir)
+        .args(["move", "1", "backburner"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved #1 to backburner."));
+    bb(&dir).args(["done", "1"]).assert().success();
+    bb(&dir)
+        .args(["undone", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Marked #1 undone."));
+
+    let value = json_output(bb(&dir).args(["show", "1", "--json"]).assert());
+    let tomorrow = (Local::now().date_naive() + Days::new(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    assert_eq!(value["task"]["status"], "backburner");
+    assert_eq!(value["task"]["plannedDateKey"], tomorrow);
+    assert_eq!(value["task"]["completedAt"], Value::Null);
+    assert_eq!(value["notes"][0]["body"], "Added after creation.");
+    assert_eq!(value["notes"][0]["source"], "agent");
+
+    bb(&dir).args(["plan", "1", "none"]).assert().success();
+    let unplanned = json_output(bb(&dir).args(["show", "1", "--json"]).assert());
+    assert_eq!(unplanned["task"]["plannedDateKey"], Value::Null);
+
+    bb(&dir)
+        .args(["delete", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Deleted #1."));
+    bb(&dir)
+        .args(["show", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("task #1 not found"));
+}
+
+#[test]
+fn move_supports_archived_alias() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir).args(["add", "Alias task"]).assert().success();
+
+    bb(&dir)
+        .args(["move", "1", "archived"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved #1 to archived."));
+
+    bb(&dir)
+        .arg("archive")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Alias task"));
+}
+
+#[test]
 fn context_json_promotes_due_items_and_includes_backburner() {
     let dir = repo();
-    bb(&dir).arg("init").assert().success();
+    init(&dir);
     bb(&dir)
         .args(["add", "Active", "--today"])
         .assert()
@@ -183,6 +384,30 @@ fn context_json_promotes_due_items_and_includes_backburner() {
 }
 
 #[test]
+fn context_human_output_includes_promotions_and_backburner_sample() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Due context", "--plan", "today"])
+        .assert()
+        .success();
+    bb(&dir)
+        .args(["add", "Deferred context"])
+        .assert()
+        .success();
+
+    bb(&dir)
+        .arg("context")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Promoted 1 planned task(s)."))
+        .stdout(predicate::str::contains("Today"))
+        .stdout(predicate::str::contains("#1 Due context"))
+        .stdout(predicate::str::contains("Backburner"))
+        .stdout(predicate::str::contains("#2 Deferred context"));
+}
+
+#[test]
 fn prompt_prints_bundled_agent_prompt() {
     let dir = repo();
 
@@ -195,6 +420,22 @@ fn prompt_prints_bundled_agent_prompt() {
 }
 
 #[test]
+fn every_bundled_prompt_prints_expected_text() {
+    let dir = repo();
+
+    bb(&dir)
+        .args(["prompt", "session-end"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("bb finish-session"));
+    bb(&dir)
+        .args(["prompt", "low-hanging-fruit"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Suggest up to three small"));
+}
+
+#[test]
 fn commands_fail_before_init() {
     let dir = repo();
 
@@ -203,4 +444,68 @@ fn commands_fail_before_init() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("run `bb init` first"));
+}
+
+#[test]
+fn commands_fail_outside_git_repository() {
+    let dir = tempfile::tempdir().expect("temp dir");
+
+    bb(&dir)
+        .arg("init")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not inside a git repository"));
+}
+
+#[test]
+fn invalid_inputs_return_useful_errors() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir).args(["add", "Valid task"]).assert().success();
+
+    bb(&dir)
+        .args(["add", ""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("title cannot be empty"));
+    bb(&dir)
+        .args(["note", "1", ""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("note cannot be empty"));
+    bb(&dir)
+        .args(["plan", "1", "next-week"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "plan must be today, tomorrow, none, or YYYY-MM-DD",
+        ));
+    bb(&dir)
+        .args(["show", "404"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("task #404 not found"));
+    bb(&dir)
+        .args(["prompt", "missing"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown prompt 'missing'"));
+}
+
+#[test]
+fn clap_rejects_invalid_enums() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir).args(["add", "Valid task"]).assert().success();
+
+    bb(&dir)
+        .args(["move", "1", "later"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value 'later'"));
+    bb(&dir)
+        .args(["note", "1", "Hello", "--source", "robot"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value 'robot'"));
 }

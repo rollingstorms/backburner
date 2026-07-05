@@ -27,8 +27,8 @@ pub enum Command {
     Plan(PlanArgs),
     Note(NoteArgs),
     Delete(IdArgs),
-    #[command(name = "finish-day")]
-    FinishDay(JsonFlag),
+    #[command(name = "finish-session", alias = "finish-day")]
+    FinishSession(JsonFlag),
     Context(JsonFlag),
     Prompt(PromptArgs),
 }
