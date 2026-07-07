@@ -2,6 +2,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::models::{Source, TaskStatus};
 
+const TODAY_EMOJI: &str = "☀";
+const BACKBURNER_EMOJI: &str = "🔥";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "bb",
@@ -19,7 +22,7 @@ pub struct Cli {
 pub enum Command {
     /// Initialize Backburner storage for this git repo.
     Init(JsonFlag),
-    /// Add a task, defaulting to Backburner.
+    /// Add a task to Today.
     Add(AddArgs),
     /// List active tasks for the current session.
     Today(JsonFlag),
@@ -61,8 +64,11 @@ pub struct JsonFlag {
 pub struct AddArgs {
     /// Task title.
     pub title: String,
-    /// Put the new task in Today instead of Backburner.
+    /// Put the new task in Backburner instead of Today.
     #[arg(long)]
+    pub backburner: bool,
+    /// Kept for compatibility; Today is already the default.
+    #[arg(long, hide = true)]
     pub today: bool,
     /// Reminder date such as today, tomorrow, none, or YYYY-MM-DD.
     #[arg(long)]
@@ -164,4 +170,89 @@ impl From<SourceArg> for Source {
             SourceArg::Agent => Source::Agent,
         }
     }
+}
+
+pub fn normalize_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut args: Vec<String> = args.into_iter().collect();
+    normalize_top_level_command(&mut args);
+    normalize_command_values(&mut args);
+    args
+}
+
+fn normalize_top_level_command(args: &mut [String]) {
+    if let Some(command) = args.get_mut(1) {
+        if let Some(normalized) = emoji_command(command) {
+            *command = normalized.to_owned();
+        }
+    }
+}
+
+fn normalize_command_values(args: &mut Vec<String>) {
+    match args.get(1).map(String::as_str) {
+        Some("add") => normalize_add_args(args),
+        Some("move") => normalize_move_args(args),
+        Some("plan") => normalize_plan_args(args),
+        _ => {}
+    }
+}
+
+fn normalize_add_args(args: &mut Vec<String>) {
+    match args.last().map(|arg| emoji_key(arg)) {
+        Some(key) if key == TODAY_EMOJI => {
+            args.pop();
+        }
+        Some(key) if key == BACKBURNER_EMOJI => {
+            if let Some(last) = args.last_mut() {
+                *last = "--backburner".to_owned();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn normalize_move_args(args: &mut [String]) {
+    if let Some(status) = args.get_mut(3) {
+        if let Some(normalized) = emoji_status(status) {
+            *status = normalized.to_owned();
+        }
+    }
+}
+
+fn normalize_plan_args(args: &mut [String]) {
+    if let Some(plan) = args.get_mut(3) {
+        if emoji_key(plan) == TODAY_EMOJI {
+            *plan = "today".to_owned();
+        }
+    }
+}
+
+fn emoji_command(value: &str) -> Option<&'static str> {
+    match emoji_key(value).as_str() {
+        "+" | "➕" => Some("add"),
+        TODAY_EMOJI => Some("today"),
+        BACKBURNER_EMOJI => Some("backburner"),
+        "📰" | "🗄" => Some("archive"),
+        "📋" => Some("context"),
+        "📓" | "👁" => Some("show"),
+        "📝" => Some("note"),
+        "✅" => Some("done"),
+        "🟩" => Some("undone"),
+        "👉" | "🚚" => Some("move"),
+        "📅" => Some("plan"),
+        "🌇" => Some("finish-session"),
+        _ => None,
+    }
+}
+
+fn emoji_status(value: &str) -> Option<&'static str> {
+    match emoji_key(value).as_str() {
+        TODAY_EMOJI => Some("today"),
+        BACKBURNER_EMOJI => Some("backburner"),
+        "📰" | "🗄" | "✅" => Some("archive"),
+        _ => None,
+    }
+}
+
+fn emoji_key(value: &str) -> String {
+    value.replace('\u{fe0f}', "")
 }

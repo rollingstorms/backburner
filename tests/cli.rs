@@ -64,13 +64,13 @@ fn init_json_reports_project_paths() {
 }
 
 #[test]
-fn add_defaults_to_backburner_and_today_flag_uses_today() {
+fn add_defaults_to_today_and_backburner_flag_defers() {
     let dir = repo();
     init(&dir);
 
-    bb(&dir).args(["add", "Remember this"]).assert().success();
+    bb(&dir).args(["add", "Do this now"]).assert().success();
     bb(&dir)
-        .args(["add", "Do this now", "--today"])
+        .args(["add", "Remember this", "--backburner"])
         .assert()
         .success();
 
@@ -78,26 +78,20 @@ fn add_defaults_to_backburner_and_today_flag_uses_today() {
         .arg("backburner")
         .assert()
         .success()
-        .stdout(predicate::str::contains("#1 Remember this"));
+        .stdout(predicate::str::contains("#2 Remember this"));
     bb(&dir)
         .arg("today")
         .assert()
         .success()
-        .stdout(predicate::str::contains("#2 Do this now"));
+        .stdout(predicate::str::contains("#1 Do this now"));
 }
 
 #[test]
 fn done_and_finish_session_preserves_backburner_rules() {
     let dir = repo();
     init(&dir);
-    bb(&dir)
-        .args(["add", "Complete me", "--today"])
-        .assert()
-        .success();
-    bb(&dir)
-        .args(["add", "Carry me over", "--today"])
-        .assert()
-        .success();
+    bb(&dir).args(["add", "Complete me"]).assert().success();
+    bb(&dir).args(["add", "Carry me over"]).assert().success();
 
     bb(&dir).args(["done", "1"]).assert().success();
     bb(&dir).arg("today").assert().success().stdout(
@@ -130,11 +124,11 @@ fn planned_backburner_tasks_promote_when_reading_today() {
         .to_string();
 
     bb(&dir)
-        .args(["add", "Due now", "--plan", "today"])
+        .args(["add", "Due now", "--backburner", "--plan", "today"])
         .assert()
         .success();
     bb(&dir)
-        .args(["add", "Due later", "--plan", &tomorrow])
+        .args(["add", "Due later", "--backburner", "--plan", &tomorrow])
         .assert()
         .success();
 
@@ -157,7 +151,13 @@ fn promoted_unfinished_tasks_stay_backburnered_after_finish_session() {
     init(&dir);
 
     bb(&dir)
-        .args(["add", "Due but unfinished", "--plan", "today"])
+        .args([
+            "add",
+            "Due but unfinished",
+            "--backburner",
+            "--plan",
+            "today",
+        ])
         .assert()
         .success();
     bb(&dir)
@@ -187,10 +187,7 @@ fn finish_day_remains_supported_as_alias() {
     let dir = repo();
     init(&dir);
 
-    bb(&dir)
-        .args(["add", "Alias complete", "--today"])
-        .assert()
-        .success();
+    bb(&dir).args(["add", "Alias complete"]).assert().success();
     bb(&dir).args(["done", "1"]).assert().success();
 
     let result = json_output(bb(&dir).args(["finish-day", "--json"]).assert());
@@ -203,13 +200,10 @@ fn stale_settings_roll_today_tasks_into_archive_and_backburner() {
     let dir = repo();
     init(&dir);
     bb(&dir)
-        .args(["add", "Archive tomorrow", "--today"])
+        .args(["add", "Archive tomorrow"])
         .assert()
         .success();
-    bb(&dir)
-        .args(["add", "Defer tomorrow", "--today"])
-        .assert()
-        .success();
+    bb(&dir).args(["add", "Defer tomorrow"]).assert().success();
     bb(&dir).args(["done", "1"]).assert().success();
 
     let yesterday = Local::now()
@@ -284,15 +278,12 @@ fn show_json_includes_evidence() {
 fn list_commands_support_json_output() {
     let dir = repo();
     init(&dir);
+    bb(&dir).args(["add", "Today item"]).assert().success();
     bb(&dir)
-        .args(["add", "Today item", "--today"])
+        .args(["add", "Backburner item", "--backburner"])
         .assert()
         .success();
-    bb(&dir).args(["add", "Backburner item"]).assert().success();
-    bb(&dir)
-        .args(["add", "Archived item", "--today"])
-        .assert()
-        .success();
+    bb(&dir).args(["add", "Archived item"]).assert().success();
     bb(&dir).args(["move", "3", "archive"]).assert().success();
 
     let today = json_output(bb(&dir).args(["today", "--json"]).assert());
@@ -316,7 +307,6 @@ fn show_human_output_includes_task_details() {
         .args([
             "add",
             "Inspect output",
-            "--today",
             "--file",
             "src/main.rs:10",
             "--cmd",
@@ -342,10 +332,7 @@ fn show_human_output_includes_task_details() {
 fn note_plan_move_undone_and_delete_commands_mutate_tasks() {
     let dir = repo();
     init(&dir);
-    bb(&dir)
-        .args(["add", "Mutable task", "--today"])
-        .assert()
-        .success();
+    bb(&dir).args(["add", "Mutable task"]).assert().success();
 
     bb(&dir)
         .args(["note", "1", "Added after creation.", "--source", "agent"])
@@ -400,7 +387,7 @@ fn undone_restores_archived_tasks_to_backburner() {
     let dir = repo();
     init(&dir);
     bb(&dir)
-        .args(["add", "Revive this later", "--today"])
+        .args(["add", "Revive this later"])
         .assert()
         .success();
     bb(&dir).args(["done", "1"]).assert().success();
@@ -445,18 +432,100 @@ fn move_supports_archived_alias() {
 }
 
 #[test]
+fn emoji_commands_normalize_to_existing_commands() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .args(["➕", "Today by emoji", "☀️"])
+        .assert()
+        .success();
+    bb(&dir)
+        .args(["add", "Deferred by emoji", "🔥"])
+        .assert()
+        .success();
+
+    bb(&dir)
+        .arg("☀️")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Today by emoji"))
+        .stdout(predicate::str::contains("Deferred by emoji").not());
+    bb(&dir)
+        .arg("🔥")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#2 Deferred by emoji"));
+
+    bb(&dir)
+        .args(["🚚", "1", "🔥"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved #1 to backburner."));
+    bb(&dir)
+        .args(["📅", "2", "☀️"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated plan for #2."));
+
+    bb(&dir)
+        .arg("📋")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Today"))
+        .stdout(predicate::str::contains("Backburner"));
+    bb(&dir)
+        .args(["👁️", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Today by emoji"));
+    bb(&dir)
+        .args(["📝", "1", "Emoji note"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Added note to #1."));
+    bb(&dir)
+        .args(["✅", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Marked #1 done."));
+    bb(&dir)
+        .args(["🟩", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Marked #1 undone in backburner."));
+    bb(&dir)
+        .args(["🚚", "1", "🗄️"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved #1 to archived."));
+    bb(&dir)
+        .arg("🗄️")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Today by emoji"));
+    bb(&dir).args(["+", "Finish by emoji"]).assert().success();
+    bb(&dir).args(["✅", "3"]).assert().success();
+    bb(&dir)
+        .arg("🌇")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Archived 1 completed task(s)."));
+}
+
+#[test]
 fn context_json_promotes_due_items_and_includes_backburner() {
     let dir = repo();
     init(&dir);
+    bb(&dir).args(["add", "Active"]).assert().success();
     bb(&dir)
-        .args(["add", "Active", "--today"])
+        .args(["add", "Due memory", "--backburner", "--plan", "today"])
         .assert()
         .success();
     bb(&dir)
-        .args(["add", "Due memory", "--plan", "today"])
+        .args(["add", "Later memory", "--backburner"])
         .assert()
         .success();
-    bb(&dir).args(["add", "Later memory"]).assert().success();
 
     let value = json_output(bb(&dir).args(["context", "--json"]).assert());
     assert_eq!(value["promoted"], 1);
@@ -469,11 +538,11 @@ fn context_human_output_includes_promotions_and_backburner_sample() {
     let dir = repo();
     init(&dir);
     bb(&dir)
-        .args(["add", "Due context", "--plan", "today"])
+        .args(["add", "Due context", "--backburner", "--plan", "today"])
         .assert()
         .success();
     bb(&dir)
-        .args(["add", "Deferred context"])
+        .args(["add", "Deferred context", "--backburner"])
         .assert()
         .success();
 
@@ -497,7 +566,7 @@ fn help_describes_commands_and_options() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "add             Add a task, defaulting to Backburner",
+            "add             Add a task to Today",
         ))
         .stdout(predicate::str::contains(
             "finish-session  Archive completed Today tasks and defer unfinished ones",
@@ -521,7 +590,7 @@ fn help_describes_commands_and_options() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "--today            Put the new task in Today instead of Backburner",
+            "--backburner       Put the new task in Backburner instead of Today",
         ))
         .stdout(predicate::str::contains(
             "--cmd <COMMANDS>   Command evidence for restarting or verifying work",

@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(cli::normalize_args(env::args()));
     match cli.command {
         Command::Help(args) => {
             if args.usage {
@@ -69,10 +69,10 @@ fn run_project_command(command: Command) -> Result<()> {
             let planned_date_key = args.plan.as_deref().map(parse_plan).transpose()?.flatten();
             let details = repository.create(CreateTask {
                 title: args.title,
-                status: if args.today {
-                    TaskStatus::Today
-                } else {
+                status: if args.backburner {
                     TaskStatus::Backburner
+                } else {
+                    TaskStatus::Today
                 },
                 planned_date_key,
                 source: args.source.into(),
@@ -188,9 +188,10 @@ fn print_advanced_usage() {
 Start a repo:
   bb init
 
-Capture work without interrupting the session:
+Capture active work:
   bb add "Investigate flaky login redirect"
-  bb add "Fix failing auth test" --today
+  bb add "Fix failing auth test"
+  bb add "Park this for later" --backburner
 
 Attach restart evidence:
   bb add "Fix auth redirect regression" \
@@ -205,6 +206,24 @@ Review and move work:
   bb show 1
   bb move 1 today
   bb plan 1 tomorrow
+
+Emoji aliases:
+  bb + "Fix flaky login redirect" ☀️
+  bb ➕ "Park this for later" 🔥
+  bb add "Fix flaky login redirect" ☀️
+  bb add "Park this for later" 🔥
+  bb ☀️
+  bb 🔥
+  bb 📋
+  bb 👁️ 1
+  bb 📝 1 "Only fails after token expiry."
+  bb ✅ 1
+  bb 🟩 1
+  bb 🚚 1 🔥
+  bb move 1 🔥
+  bb move 1 🗄️
+  bb 📅 1 ☀️
+  bb 🌇
 
 Close a session:
   bb done 1
