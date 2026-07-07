@@ -316,7 +316,7 @@ fn note_plan_move_undone_and_delete_commands_mutate_tasks() {
         .args(["undone", "1"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Marked #1 undone."));
+        .stdout(predicate::str::contains("Marked #1 undone in backburner."));
 
     let value = json_output(bb(&dir).args(["show", "1", "--json"]).assert());
     let tomorrow = (Local::now().date_naive() + Days::new(1))
@@ -342,6 +342,36 @@ fn note_plan_move_undone_and_delete_commands_mutate_tasks() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("task #1 not found"));
+}
+
+#[test]
+fn undone_restores_archived_tasks_to_backburner() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Revive this later", "--today"])
+        .assert()
+        .success();
+    bb(&dir).args(["done", "1"]).assert().success();
+    bb(&dir).arg("finish-session").assert().success();
+
+    bb(&dir)
+        .args(["undone", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Marked #1 undone in backburner."));
+
+    bb(&dir)
+        .arg("archive")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Revive this later").not());
+
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[ ] #1 Revive this later"));
 }
 
 #[test]

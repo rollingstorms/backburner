@@ -121,6 +121,33 @@ impl Repository {
         Ok(())
     }
 
+    pub fn mark_undone(&self, id: i64) -> Result<TaskStatus> {
+        let task = self
+            .find_task(id)?
+            .with_context(|| format!("task #{id} not found"))?;
+        let now = now_string();
+        let status = if task.status == TaskStatus::Archived {
+            TaskStatus::Backburner
+        } else {
+            task.status
+        };
+        let sort_order = if status == task.status {
+            task.sort_order
+        } else {
+            self.next_sort_order(status)?
+        };
+        self.conn.execute(
+            r#"
+            update tasks
+            set status = ?1, updated_at = ?2, completed_at = null, archived_at = null,
+                sort_order = ?3
+            where id = ?4
+            "#,
+            params![status.as_str(), now, sort_order, id],
+        )?;
+        Ok(status)
+    }
+
     pub fn move_to(&self, id: i64, status: TaskStatus) -> Result<()> {
         let task = self
             .find_task(id)?

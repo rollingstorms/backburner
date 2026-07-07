@@ -123,8 +123,8 @@ fn run_project_command(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Undone(args) => {
-            repository.set_completed(args.id, false)?;
-            println!("Marked #{} undone.", args.id);
+            let status = repository.mark_undone(args.id)?;
+            println!("Marked #{} undone in {}.", args.id, status);
             Ok(())
         }
         Command::Move(args) => {

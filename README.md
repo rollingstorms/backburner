@@ -7,6 +7,34 @@ small: tasks live in `today`, `backburner`, or `archived`. Treat `today` as the
 active session list: completed Today tasks archive when you run
 `bb finish-session`; unfinished Today tasks return to the Backburner.
 
+## Architecture
+
+Backburner is project memory, not obligation. The core model is intentionally
+small:
+
+- `today` is active memory: the current agent session or daily working set.
+- `backburner` is common memory: deferred, forgotten, or parked work worth
+  keeping available without making it active.
+- `archived` is resolved memory: work that has enough evidence to leave the
+  active system.
+
+The normal lifecycle is:
+
+```text
+backburner -> today -> archived
+             today -> backburner
+```
+
+`finish-session` performs the reconciliation step: completed Today tasks move
+to Archive, and unfinished Today tasks move back to Backburner. Planning is not
+part of the scope model; `bb plan` is only a reminder overlay that can promote a
+Backburner item into Today when it becomes relevant.
+
+The current model assumes one active working session per checkout. Multiple
+parallel agent sessions share the same `today` list, so they can conflict or
+mix session state. Treat that as a known limitation rather than a separate
+status bucket.
+
 ## Install for Development
 
 ```sh
