@@ -2,14 +2,14 @@ mod cli;
 mod db;
 mod models;
 mod output;
-mod prompts;
 mod repository;
 mod root;
+mod settings;
 
 use std::env;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 use crate::cli::{Cli, Command};
 use crate::models::{TaskStatus, parse_plan};
@@ -25,11 +25,21 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Prompt(args) => prompts::print_prompt(&args.name),
+        Command::Help(args) => {
+            if args.usage {
+                print_advanced_usage();
+                Ok(())
+            } else {
+                Cli::command().print_help()?;
+                println!();
+                Ok(())
+            }
+        }
         Command::Init(args) => {
             let cwd = env::current_dir()?;
             let root = root::find_git_root(&cwd)?;
             let db_path = root::init_project(&root)?;
+            settings::init(&root)?;
             let conn = db::open(&db_path)?;
             drop(conn);
             if args.json {
@@ -52,6 +62,7 @@ fn run_project_command(command: Command) -> Result<()> {
     let db_path = root::ensure_initialized(&root)?;
     let conn = db::open(&db_path)?;
     let mut repository = Repository::new(conn);
+    settings::rollover_if_needed(&root, &mut repository)?;
 
     match command {
         Command::Add(args) => {
@@ -166,6 +177,40 @@ fn run_project_command(command: Command) -> Result<()> {
                 Ok(())
             }
         }
-        Command::Init(_) | Command::Prompt(_) => unreachable!(),
+        Command::Init(_) | Command::Help(_) => unreachable!(),
     }
+}
+
+fn print_advanced_usage() {
+    println!(
+        r#"Backburner advanced usage
+
+Start a repo:
+  bb init
+
+Capture work without interrupting the session:
+  bb add "Investigate flaky login redirect"
+  bb add "Fix failing auth test" --today
+
+Attach restart evidence:
+  bb add "Fix auth redirect regression" \
+    --file src/auth.rs:42 \
+    --cmd "cargo test auth" \
+    --note "Fails after token expiry." \
+    --source agent
+
+Review and move work:
+  bb today
+  bb backburner
+  bb show 1
+  bb move 1 today
+  bb plan 1 tomorrow
+
+Close a session:
+  bb done 1
+  bb finish-session
+
+Context:
+  bb context --json"#
+    );
 }

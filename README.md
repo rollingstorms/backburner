@@ -12,7 +12,7 @@ active session list: completed Today tasks archive when you run
 Backburner is project memory, not obligation. The core model is intentionally
 small:
 
-- `today` is active memory: the current agent session or daily working set.
+- `today` is active memory: the current working session or daily working set.
 - `backburner` is common memory: deferred, forgotten, or parked work worth
   keeping available without making it active.
 - `archived` is resolved memory: work that has enough evidence to leave the
@@ -31,9 +31,9 @@ part of the scope model; `bb plan` is only a reminder overlay that can promote a
 Backburner item into Today when it becomes relevant.
 
 The current model assumes one active working session per checkout. Multiple
-parallel agent sessions share the same `today` list, so they can conflict or
-mix session state. Treat that as a known limitation rather than a separate
-status bucket.
+parallel sessions share the same `today` list, so they can conflict or mix
+session state. Treat that as a known limitation rather than a separate status
+bucket.
 
 ## Install for Development
 
@@ -84,17 +84,13 @@ bb add "Fix auth redirect regression" \
   --source agent
 ```
 
-## Agent Context
+## Context
 
 ```sh
 bb context --json
-bb prompt session-start
-bb prompt session-end
-bb prompt low-hanging-fruit
 ```
 
-The CLI does not call an LLM. It stores facts and emits context that humans or
-agents can interpret.
+Context includes Today and Backburner tasks.
 
 ## Test
 

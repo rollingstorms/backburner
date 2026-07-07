@@ -42,6 +42,7 @@ fn init_creates_private_project_store() {
     );
 
     assert!(dir.path().join(".backburner/backburner.db").exists());
+    assert!(dir.path().join(".backburner/settings.json").exists());
     let exclude = std::fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap();
     assert!(exclude.lines().any(|line| line == ".backburner/"));
 }
@@ -195,6 +196,56 @@ fn finish_day_remains_supported_as_alias() {
     let result = json_output(bb(&dir).args(["finish-day", "--json"]).assert());
     assert_eq!(result["archived"], 1);
     assert_eq!(result["backburnered"], 0);
+}
+
+#[test]
+fn stale_settings_roll_today_tasks_into_archive_and_backburner() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Archive tomorrow", "--today"])
+        .assert()
+        .success();
+    bb(&dir)
+        .args(["add", "Defer tomorrow", "--today"])
+        .assert()
+        .success();
+    bb(&dir).args(["done", "1"]).assert().success();
+
+    let yesterday = Local::now()
+        .date_naive()
+        .checked_sub_days(Days::new(1))
+        .expect("yesterday")
+        .format("%Y-%m-%d")
+        .to_string();
+    std::fs::write(
+        dir.path().join(".backburner/settings.json"),
+        format!("{{\"lastRolloverDate\":\"{yesterday}\"}}\n"),
+    )
+    .expect("write settings");
+
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing here."));
+
+    bb(&dir)
+        .arg("archive")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Archive tomorrow"));
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#2 Defer tomorrow"));
+
+    let settings = std::fs::read_to_string(dir.path().join(".backburner/settings.json")).unwrap();
+    assert!(settings.contains(&format!(
+        "\"lastRolloverDate\": \"{}\"",
+        Local::now().format("%Y-%m-%d")
+    )));
 }
 
 #[test]
@@ -438,31 +489,60 @@ fn context_human_output_includes_promotions_and_backburner_sample() {
 }
 
 #[test]
-fn prompt_prints_bundled_agent_prompt() {
+fn help_describes_commands_and_options() {
     let dir = repo();
 
     bb(&dir)
-        .args(["prompt", "session-start"])
+        .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("bb context --json"))
-        .stdout(predicate::str::contains("Do not expand scope"));
-}
-
-#[test]
-fn every_bundled_prompt_prints_expected_text() {
-    let dir = repo();
+        .stdout(predicate::str::contains(
+            "add             Add a task, defaulting to Backburner",
+        ))
+        .stdout(predicate::str::contains(
+            "finish-session  Archive completed Today tasks and defer unfinished ones",
+        ))
+        .stdout(predicate::str::contains(
+            "undone          Mark a task incomplete and revive archived tasks",
+        ))
+        .stdout(predicate::str::contains(
+            "context         Print context: Today and Backburner tasks",
+        ))
+        .stdout(predicate::str::contains("prompt          Print").not())
+        .stdout(predicate::str::contains(
+            "help            Print command help or advanced usage examples",
+        ))
+        .stdout(predicate::str::contains(
+            "Run `bb help --usage` for multiline workflow examples.",
+        ));
 
     bb(&dir)
-        .args(["prompt", "session-end"])
+        .args(["add", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("bb finish-session"));
-    bb(&dir)
-        .args(["prompt", "low-hanging-fruit"])
+        .stdout(predicate::str::contains(
+            "--today            Put the new task in Today instead of Backburner",
+        ))
+        .stdout(predicate::str::contains(
+            "--cmd <COMMANDS>   Command evidence for restarting or verifying work",
+        ));
+
+    let plain_dir = tempfile::tempdir().expect("temp dir");
+    bb(&plain_dir)
+        .args(["help", "--usage"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Suggest up to three small"));
+        .stdout(predicate::str::contains("Backburner advanced usage"))
+        .stdout(predicate::str::contains(
+            "bb add \"Fix auth redirect regression\" \\",
+        ))
+        .stdout(predicate::str::contains("bb context --json"));
+
+    bb(&plain_dir)
+        .arg("help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: bb <COMMAND>"));
 }
 
 #[test]
@@ -515,11 +595,6 @@ fn invalid_inputs_return_useful_errors() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("task #404 not found"));
-    bb(&dir)
-        .args(["prompt", "missing"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("unknown prompt 'missing'"));
 }
 
 #[test]
