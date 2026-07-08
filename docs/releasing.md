@@ -33,6 +33,19 @@ publishes in the crates.io settings for the `backburner` crate:
 This lets GitHub Actions publish with a short-lived OIDC token instead of a
 long-lived crates.io token stored in GitHub secrets.
 
+## Enable Homebrew Publishing
+
+Create the tap repository at `rollingstorms/homebrew-tap`, then add a GitHub
+Actions secret named `HOMEBREW_TAP_TOKEN` to `rollingstorms/backburner`.
+
+The token needs permission to push commits to `rollingstorms/homebrew-tap`.
+`cargo-dist` will publish the formula as `backburner.rb`; users install the
+`bb` binary with:
+
+```sh
+brew install rollingstorms/tap/backburner
+```
+
 ## Publish a New Version
 
 1. Update `version` in `Cargo.toml`.
@@ -60,7 +73,4 @@ The tag starts two workflows:
 - `Publish` verifies that the tag matches `Cargo.toml`, reruns the checks, and
   publishes to crates.io when that version does not already exist.
 - `Release` uses `cargo-dist` to create a GitHub Release with prebuilt `bb`
-  binaries, checksums, and shell/PowerShell installers.
-
-For `v0.1.0`, the crate already exists on crates.io. Pushing the tag will skip
-the crates.io upload and only create the binary release artifacts.
+  binaries, checksums, shell/PowerShell installers, and the Homebrew formula.

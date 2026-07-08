@@ -48,6 +48,12 @@ macOS and Linux:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rollingstorms/backburner/releases/latest/download/backburner-installer.sh | sh
 ```
 
+Homebrew:
+
+```sh
+brew install rollingstorms/tap/backburner
+```
+
 Windows PowerShell:
 
 ```powershell
