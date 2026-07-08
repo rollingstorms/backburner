@@ -2,46 +2,58 @@
 
 Private project memory for work worth coming back to.
 
+> Not everything belongs today.
+>
+> Put it on the backburner.
+
 Backburner stores tasks locally inside a git repository. It is intentionally
-small: tasks live in `today`, `backburner`, or `archived`. Treat `today` as the
-active session list: completed Today and Backburner tasks archive when you run
-`bb finish-session`; unfinished Today tasks return to the Backburner.
+small. Every task lives in one of three places: **Today**, **Backburner**, or
+**Archive**.
 
-## Architecture
+Backburner is named after the kitchen. When you're busy on the line, you move
+something to the back burner—not because it isn't important, but because
+something else needs your attention first. It'll still be there when you're
+ready.
 
-Backburner is project memory, not obligation. The core model is intentionally
-small:
+## The Model
 
-- `today` is active memory: the current working session or daily working set.
-- `backburner` is common memory: deferred, forgotten, or parked work worth
-  keeping available without making it active.
-- `archived` is resolved memory: work that has enough evidence to leave the
-  active system.
+Backburner has three states.
 
-The normal lifecycle is:
+- **Today** — your active working memory.
+- **Backburner** — deferred work waiting to become relevant again.
+- **Archive** — resolved work that is no longer on the docket.
 
 ```text
-today -> archived
-today -> backburner -> today
+Today ─────► Archive
+   │
+   ▼
+Backburner ─────► Today
 ```
 
-New tasks enter Today by default. Use `--backburner` when the work is worth
-keeping but should not be active yet.
+New tasks enter Today by default. Use `--backburner` to park work without
+making it active.
 
-`finish-session` performs the reconciliation step: completed Today and
-Backburner tasks move to Archive, and unfinished Today tasks move back to
-Backburner. Planning is not part of the scope model; `bb plan` is only a
-reminder overlay that can bring a Backburner item back into Today when it
-becomes relevant.
+`bb finish-session` reconciles your working memory.
 
-Sessions are a local CLI convenience. `bb session start <name>` sets the active
-session pointer for new tasks and scoped list/context commands. `bb session end`
-clears that pointer without reconciling work. `bb finish-session` reconciles the
-active session when one is set, or everything when no session is active. Use
-`bb finish-session <name>` to reconcile a specific session regardless of the
-pointer state.
+- Completed tasks move to Archive.
+- Unfinished Today tasks return to the Backburner.
 
-## Install for Development
+Tomorrow starts with a clean Today.
+
+## Sessions
+
+Sessions scope the Today list.
+
+`bb session start <name>` creates or resumes a working session. New tasks are
+added to that session's Today list.
+
+`bb finish-session` reconciles the active session. When no session is active,
+it reconciles every Today task.
+
+Use `bb finish-session <name>` to reconcile a specific session regardless of
+which session is currently active.
+
+## Install
 
 ```sh
 cargo build
@@ -49,86 +61,55 @@ cargo build
 
 The binary is named `bb`.
 
-## Start a Repo
+## Initialize a Repository
 
 ```sh
 bb init
 ```
 
 This creates `.backburner/backburner.db` and adds `.backburner/` to
-`.git/info/exclude`, keeping the memory private to your local checkout.
+`.git/info/exclude`, keeping your project memory private to your local checkout.
 
-## Core Commands
+## Commands
+
+### Capture
 
 ```sh
 bb add "Fix flaky login redirect"
-bb add "Fix failing tests"
 bb add "Park this for later" --backburner
+```
+
+### View
+
+```sh
 bb today
 bb backburner
 bb archive
 bb show 1
+```
+
+### Update
+
+```sh
 bb done 1
 bb undone 1
 bb move 1 today
 bb plan 1 tomorrow
 bb note 1 "Only fails after token expiry."
+```
+
+### Sessions
+
+```sh
 bb session start refactor-auth
 bb session end
 bb finish-session
 bb finish-session refactor-auth
 ```
 
-`bb add` defaults to Today so capturing work keeps it in the active working set.
-Use `--backburner` when a task should stay deferred.
+## Context
 
-## Emoji Aliases
-
-Backburner accepts a small emoji vocabulary for terse automation.
-Every emoji maps to an existing command or value; regular text commands remain
-the human-facing interface.
-
-```sh
-bb + "Fix flaky login redirect" ☀️
-bb ➕ "Park this for later" 🔥
-bb add "Fix flaky login redirect" ☀️
-bb add "Park this for later" 🔥
-bb ☀️
-bb 🔥
-bb 📋
-bb 👁️ 1
-bb 📝 1 "Only fails after token expiry."
-bb ✅ 1
-bb 🟩 1
-bb 🚚 1 🔥
-bb move 1 🔥
-bb move 1 🗄️
-bb 📅 1 ☀️
-bb plan 1 ☀️
-bb 🌇
-```
-
-| Emoji | Meaning |
-| --- | --- |
-| ➕ | Add a task |
-| ☀️ | Today |
-| 🔥 | Backburner |
-| 🗄️ | Archive |
-| 📋 | Context |
-| 👁️ | Show task details |
-| 📝 | Add task details as a note |
-| ✅ | Done |
-| 🟩 | Undone |
-| 🚚 | Move |
-| 📅 | Plan |
-| 🌇 | Finish session |
-
-The abstraction intentionally stops at one emoji per existing concept. Emoji
-aliases should not hide multi-step workflows or infer missing task ids.
-
-## Evidence
-
-Tasks can carry restart context:
+Tasks can carry context that makes them easier to resume later.
 
 ```sh
 bb add "Fix auth redirect regression" \
@@ -138,13 +119,13 @@ bb add "Fix auth redirect regression" \
   --source agent
 ```
 
-## Context
+Machine-readable context is also available:
 
 ```sh
 bb context --json
 ```
 
-Context includes Today and Backburner tasks.
+`bb context` includes Today and Backburner tasks.
 
 ## Test
 

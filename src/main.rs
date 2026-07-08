@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let cli = Cli::parse_from(cli::normalize_args(env::args()));
+    let cli = Cli::parse_from(env::args());
     match cli.command {
         Command::Help(args) => {
             if args.usage {
@@ -229,24 +229,6 @@ Review and move work:
   bb show 1
   bb move 1 today
   bb plan 1 tomorrow
-
-Emoji aliases:
-  bb + "Fix flaky login redirect" ☀️
-  bb ➕ "Park this for later" 🔥
-  bb add "Fix flaky login redirect" ☀️
-  bb add "Park this for later" 🔥
-  bb ☀️
-  bb 🔥
-  bb 📋
-  bb 👁️ 1
-  bb 📝 1 "Only fails after token expiry."
-  bb ✅ 1
-  bb 🟩 1
-  bb 🚚 1 🔥
-  bb move 1 🔥
-  bb move 1 🗄️
-  bb 📅 1 ☀️
-  bb 🌇
 
 Close a session:
   bb done 1
