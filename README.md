@@ -40,19 +40,6 @@ making it active.
 
 Tomorrow starts with a clean Today.
 
-## Sessions
-
-Sessions scope the Today list.
-
-`bb session start <name>` creates or resumes a working session. New tasks are
-added to that session's Today list.
-
-`bb finish-session` reconciles the active session. When no session is active,
-it reconciles every Today task.
-
-Use `bb finish-session <name>` to reconcile a specific session regardless of
-which session is currently active.
-
 ## Install
 
 ```sh
@@ -99,6 +86,17 @@ bb note 1 "Only fails after token expiry."
 ```
 
 ### Sessions
+
+Sessions scope the Today list.
+
+`bb session start <name>` creates or resumes a working session. New tasks are
+added to that session's Today list.
+
+`bb finish-session` reconciles the active session. When no session is active,
+it reconciles every Today task.
+
+Use `bb finish-session <name>` to reconcile a specific session regardless of
+which session is currently active.
 
 ```sh
 bb session start refactor-auth
