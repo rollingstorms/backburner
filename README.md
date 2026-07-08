@@ -48,19 +48,10 @@ cargo install backburner
 
 The installed binary is named `bb`.
 
-For a faster end-user install, Backburner can also be distributed as prebuilt
-release binaries:
+Or use the shell installer:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/rollingstorms/backburner/main/install.sh | sh
-```
-
-That installer path should be backed by release artifacts generated with
-`cargo-dist`: GitHub Releases, checksums, tarballs, and shell/PowerShell
-installers. Rust users can then also install the prebuilt binary with:
-
-```sh
-cargo binstall backburner
 ```
 
 ### Developer Build
