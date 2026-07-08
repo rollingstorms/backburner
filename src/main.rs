@@ -7,12 +7,13 @@ mod root;
 mod settings;
 
 use std::env;
+use std::io::{self, IsTerminal, Write};
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 
 use crate::cli::{Cli, Command, SessionCommand};
-use crate::models::{TaskStatus, parse_plan};
+use crate::models::{Source, TaskStatus, parse_plan};
 use crate::repository::{CreateTask, Repository, parse_file_ref};
 
 fn main() {
@@ -186,6 +187,7 @@ fn run_project_command(command: Command) -> Result<()> {
                 Ok(())
             }
         }
+        Command::Demo => run_demo(&root, &mut repository),
         Command::Session(args) => match args.command {
             SessionCommand::Start(args) => {
                 let name = settings::start_session(&root, &args.name)?;
@@ -201,6 +203,94 @@ fn run_project_command(command: Command) -> Result<()> {
             }
         },
         Command::Init(_) | Command::Help(_) => unreachable!(),
+    }
+}
+
+fn run_demo(root: &std::path::Path, repository: &mut Repository) -> Result<()> {
+    let mut demo = Demo::new();
+    let active_session = settings::active_session(root)?;
+
+    println!("Backburner demo");
+    println!();
+    println!(
+        "This creates one demo task, moves it to the Backburner, brings it back to Today, completes it, and prints the current status."
+    );
+    println!();
+
+    demo.pause()?;
+    demo.command(r#"bb add "Try the Backburner demo""#)?;
+    let details = repository.create(CreateTask {
+        title: "Try the Backburner demo".to_string(),
+        status: TaskStatus::Today,
+        planned_date_key: None,
+        session_key: active_session.clone(),
+        source: Source::Human,
+        notes: vec!["Created by `bb demo`.".to_string()],
+        files: Vec::new(),
+        commands: Vec::new(),
+    })?;
+    output::show(&details);
+
+    demo.pause()?;
+    demo.command(&format!("bb move {} backburner", details.task.id))?;
+    repository.move_to(details.task.id, TaskStatus::Backburner)?;
+    output::moved(details.task.id, TaskStatus::Backburner);
+
+    demo.pause()?;
+    demo.command("bb backburner")?;
+    let backburner =
+        repository.list_for_session(TaskStatus::Backburner, active_session.as_deref())?;
+    output::list("Backburner", &backburner);
+
+    demo.pause()?;
+    demo.command(&format!("bb move {} today", details.task.id))?;
+    repository.move_to(details.task.id, TaskStatus::Today)?;
+    output::moved(details.task.id, TaskStatus::Today);
+
+    demo.pause()?;
+    demo.command(&format!("bb done {}", details.task.id))?;
+    repository.set_completed(details.task.id, true)?;
+    println!("Marked #{} done.", details.task.id);
+
+    demo.pause()?;
+    demo.command("bb context")?;
+    let context = repository.context_for(active_session.as_deref())?;
+    output::context(&context);
+
+    println!();
+    println!(
+        "Demo complete. Run `bb finish-session` when you want completed Today tasks archived."
+    );
+    Ok(())
+}
+
+struct Demo {
+    interactive: bool,
+}
+
+impl Demo {
+    fn new() -> Self {
+        Self {
+            interactive: io::stdin().is_terminal() && io::stdout().is_terminal(),
+        }
+    }
+
+    fn pause(&mut self) -> Result<()> {
+        if !self.interactive {
+            return Ok(());
+        }
+        print!("Press Enter to continue...");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        println!();
+        Ok(())
+    }
+
+    fn command(&self, command: &str) -> Result<()> {
+        println!("$ {command}");
+        println!();
+        Ok(())
     }
 }
 
@@ -224,6 +314,7 @@ Attach restart evidence:
     --source agent
 
 Review and move work:
+  bb demo
   bb today
   bb backburner
   bb show 1

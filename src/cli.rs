@@ -48,6 +48,8 @@ pub enum Command {
     Session(SessionArgs),
     /// Print context: Today and Backburner tasks.
     Context(JsonFlag),
+    /// Run an interactive walkthrough of the core workflow.
+    Demo,
     /// Print command help or advanced usage examples.
     Help(HelpArgs),
 }

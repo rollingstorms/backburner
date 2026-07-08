@@ -602,6 +602,32 @@ fn context_human_output_includes_promotions_and_backburner_sample() {
 }
 
 #[test]
+fn demo_walks_through_core_workflow() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .arg("demo")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Backburner demo"))
+        .stdout(predicate::str::contains(
+            "$ bb add \"Try the Backburner demo\"",
+        ))
+        .stdout(predicate::str::contains("$ bb move 1 backburner"))
+        .stdout(predicate::str::contains("$ bb move 1 today"))
+        .stdout(predicate::str::contains("$ bb done 1"))
+        .stdout(predicate::str::contains("$ bb context"))
+        .stdout(predicate::str::contains("[x] #1 Try the Backburner demo"))
+        .stdout(predicate::str::contains("Demo complete."));
+
+    let value = json_output(bb(&dir).args(["show", "1", "--json"]).assert());
+    assert_eq!(value["task"]["title"], "Try the Backburner demo");
+    assert_eq!(value["task"]["status"], "today");
+    assert_ne!(value["task"]["completedAt"], Value::Null);
+}
+
+#[test]
 fn help_describes_commands_and_options() {
     let dir = repo();
 
@@ -620,6 +646,9 @@ fn help_describes_commands_and_options() {
         ))
         .stdout(predicate::str::contains(
             "context         Print context: Today and Backburner tasks",
+        ))
+        .stdout(predicate::str::contains(
+            "demo            Run an interactive walkthrough of the core workflow",
         ))
         .stdout(predicate::str::contains("prompt          Print").not())
         .stdout(predicate::str::contains(
@@ -649,6 +678,7 @@ fn help_describes_commands_and_options() {
         .stdout(predicate::str::contains(
             "bb add \"Fix auth redirect regression\" \\",
         ))
+        .stdout(predicate::str::contains("bb demo"))
         .stdout(predicate::str::contains("bb context --json"));
 
     bb(&plain_dir)

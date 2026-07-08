@@ -83,6 +83,15 @@ This creates `.backburner/backburner.db` and adds `.backburner/` to
 
 ## Commands
 
+### Demo
+
+```sh
+bb demo
+```
+
+`bb demo` walks through the core workflow: add a task, move it to the
+Backburner, bring it back to Today, complete it, and print the current context.
+
 ### Capture
 
 ```sh
