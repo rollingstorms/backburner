@@ -2,6 +2,22 @@
 name = "backburner"
 version = "0.1.0"
 edition = "2024"
+description = "Private project memory for work worth coming back to."
+license = "MIT"
+repository = "https://github.com/rollingstorms/backburner"
+homepage = "https://github.com/rollingstorms/backburner"
+documentation = "https://docs.rs/backburner"
+readme = "README.md"
+keywords = ["cli", "tasks", "productivity", "git"]
+categories = ["command-line-utilities"]
+include = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE",
+    "src/**",
+    "tests/**",
+]
 
 [dependencies]
 anyhow = "1.0.98"

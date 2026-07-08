@@ -1,1 +1,3 @@
 /target
+.backburner/
+.DS_Store

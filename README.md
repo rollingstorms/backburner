@@ -43,10 +43,35 @@ Tomorrow starts with a clean Today.
 ## Install
 
 ```sh
-cargo build
+cargo install backburner
 ```
 
-The binary is named `bb`.
+The installed binary is named `bb`.
+
+For a faster end-user install, Backburner can also be distributed as prebuilt
+release binaries:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rollingstorms/backburner/main/install.sh | sh
+```
+
+That installer path should be backed by release artifacts generated with
+`cargo-dist`: GitHub Releases, checksums, tarballs, and shell/PowerShell
+installers. Rust users can then also install the prebuilt binary with:
+
+```sh
+cargo binstall backburner
+```
+
+### Developer Build
+
+Build from source when working on Backburner itself:
+
+```sh
+git clone https://github.com/rollingstorms/backburner.git
+cd backburner
+cargo build --release
+```
 
 ## Initialize a Repository
 
