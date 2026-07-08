@@ -44,9 +44,11 @@ pub enum Command {
     Note(NoteArgs),
     /// Delete a task permanently.
     Delete(IdArgs),
-    /// Archive completed Today tasks and defer unfinished ones.
+    /// Archive completed tasks and defer unfinished Today tasks.
     #[command(name = "finish-session", alias = "finish-day")]
-    FinishSession(JsonFlag),
+    FinishSession(FinishSessionArgs),
+    /// Set or clear the active local session pointer.
+    Session(SessionArgs),
     /// Print context: Today and Backburner tasks.
     Context(JsonFlag),
     /// Print command help or advanced usage examples.
@@ -58,6 +60,35 @@ pub struct JsonFlag {
     /// Print machine-readable JSON.
     #[arg(long)]
     pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct FinishSessionArgs {
+    /// Session name to reconcile. Defaults to the active session, or everything.
+    pub session: Option<String>,
+    /// Print machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionArgs {
+    #[command(subcommand)]
+    pub command: SessionCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SessionCommand {
+    /// Set the active local session pointer.
+    Start(SessionStartArgs),
+    /// Clear the active local session pointer.
+    End,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionStartArgs {
+    /// Session name.
+    pub name: String,
 }
 
 #[derive(Debug, Args)]

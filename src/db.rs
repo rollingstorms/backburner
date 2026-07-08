@@ -28,6 +28,7 @@ fn migrate(conn: &Connection) -> Result<()> {
           completed_at text null,
           archived_at text null,
           sort_order integer not null,
+          session_key text null,
           metadata_json text not null default '{}'
         );
 
@@ -58,5 +59,26 @@ fn migrate(conn: &Connection) -> Result<()> {
         insert or ignore into schema_migrations(version) values (1);
         "#,
     )?;
+    add_column_if_missing(conn, "tasks", "session_key", "text null")?;
+    Ok(())
+}
+
+fn add_column_if_missing(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("pragma table_info({table})"))?;
+    let exists = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|name| name == column);
+    if !exists {
+        conn.execute_batch(&format!(
+            "alter table {table} add column {column} {definition}"
+        ))?;
+    }
     Ok(())
 }

@@ -4,7 +4,7 @@ Private project memory for work worth coming back to.
 
 Backburner stores tasks locally inside a git repository. It is intentionally
 small: tasks live in `today`, `backburner`, or `archived`. Treat `today` as the
-active session list: completed Today tasks archive when you run
+active session list: completed Today and Backburner tasks archive when you run
 `bb finish-session`; unfinished Today tasks return to the Backburner.
 
 ## Architecture
@@ -28,15 +28,18 @@ today -> backburner -> today
 New tasks enter Today by default. Use `--backburner` when the work is worth
 keeping but should not be active yet.
 
-`finish-session` performs the reconciliation step: completed Today tasks move
-to Archive, and unfinished Today tasks move back to Backburner. Planning is not
-part of the scope model; `bb plan` is only a reminder overlay that can bring a
-Backburner item back into Today when it becomes relevant.
+`finish-session` performs the reconciliation step: completed Today and
+Backburner tasks move to Archive, and unfinished Today tasks move back to
+Backburner. Planning is not part of the scope model; `bb plan` is only a
+reminder overlay that can bring a Backburner item back into Today when it
+becomes relevant.
 
-The current model assumes one active working session per checkout. Multiple
-parallel sessions share the same `today` list, so they can conflict or mix
-session state. Treat that as a known limitation rather than a separate status
-bucket.
+Sessions are a local CLI convenience. `bb session start <name>` sets the active
+session pointer for new tasks and scoped list/context commands. `bb session end`
+clears that pointer without reconciling work. `bb finish-session` reconciles the
+active session when one is set, or everything when no session is active. Use
+`bb finish-session <name>` to reconcile a specific session regardless of the
+pointer state.
 
 ## Install for Development
 
@@ -70,7 +73,10 @@ bb undone 1
 bb move 1 today
 bb plan 1 tomorrow
 bb note 1 "Only fails after token expiry."
+bb session start refactor-auth
+bb session end
 bb finish-session
+bb finish-session refactor-auth
 ```
 
 `bb add` defaults to Today so capturing work keeps it in the active working set.

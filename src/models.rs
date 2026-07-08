@@ -83,6 +83,7 @@ pub struct Task {
     pub completed_at: Option<String>,
     pub archived_at: Option<String>,
     pub sort_order: i64,
+    pub session_key: Option<String>,
     pub metadata_json: String,
 }
 

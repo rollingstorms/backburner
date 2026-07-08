@@ -14,6 +14,7 @@ pub struct CreateTask {
     pub title: String,
     pub status: TaskStatus,
     pub planned_date_key: Option<String>,
+    pub session_key: Option<String>,
     pub source: Source,
     pub notes: Vec<String>,
     pub files: Vec<FileRefInput>,
@@ -42,9 +43,9 @@ impl Repository {
         tx.execute(
             r#"
             insert into tasks
-              (title, status, planned_date_key, source, created_at, updated_at, sort_order, metadata_json)
+              (title, status, planned_date_key, source, created_at, updated_at, sort_order, session_key, metadata_json)
             values
-              (?1, ?2, ?3, ?4, ?5, ?5, ?6, '{}')
+              (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7, '{}')
             "#,
             params![
                 title,
@@ -52,7 +53,8 @@ impl Repository {
                 input.planned_date_key,
                 input.source.as_str(),
                 now,
-                order
+                order,
+                input.session_key
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -85,17 +87,26 @@ impl Repository {
     }
 
     pub fn list(&self, status: TaskStatus) -> Result<Vec<TaskDetails>> {
+        self.list_for_session(status, None)
+    }
+
+    pub fn list_for_session(
+        &self,
+        status: TaskStatus,
+        session_key: Option<&str>,
+    ) -> Result<Vec<TaskDetails>> {
         let mut stmt = self.conn.prepare(
             r#"
             select id, title, status, planned_date_key, source, created_at, updated_at,
-                   completed_at, archived_at, sort_order, metadata_json
+                   completed_at, archived_at, sort_order, session_key, metadata_json
             from tasks
             where status = ?1
+              and (?2 is null or session_key = ?2)
             order by planned_date_key is null, planned_date_key asc, sort_order asc, created_at asc
             "#,
         )?;
         let tasks = stmt
-            .query_map(params![status.as_str()], map_task)?
+            .query_map(params![status.as_str(), session_key], map_task)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         tasks
             .into_iter()
@@ -219,8 +230,13 @@ impl Repository {
     }
 
     pub fn finish_session(&mut self) -> Result<FinishSessionResult> {
-        let today = self.list_tasks_only(TaskStatus::Today)?;
-        if today.is_empty() {
+        self.finish_session_for(None)
+    }
+
+    pub fn finish_session_for(&mut self, session_key: Option<&str>) -> Result<FinishSessionResult> {
+        let today = self.list_tasks_only(TaskStatus::Today, session_key)?;
+        let completed_backburner = self.completed_backburner_tasks(session_key)?;
+        if today.is_empty() && completed_backburner.is_empty() {
             return Ok(FinishSessionResult::default());
         }
         let mut archived = 0;
@@ -255,6 +271,18 @@ impl Repository {
                 backburnered += 1;
             }
         }
+        for task in completed_backburner {
+            tx.execute(
+                r#"
+                update tasks
+                set status = 'archived', updated_at = ?1, archived_at = ?1, sort_order = ?2
+                where id = ?3
+                "#,
+                params![now, next_archive, task.id],
+            )?;
+            next_archive += 1;
+            archived += 1;
+        }
         tx.commit()?;
         Ok(FinishSessionResult {
             archived,
@@ -262,21 +290,22 @@ impl Repository {
         })
     }
 
-    pub fn promote_due(&mut self) -> Result<usize> {
+    pub fn promote_due_for(&mut self, session_key: Option<&str>) -> Result<usize> {
         let key = today_key();
         let due = {
             let mut stmt = self.conn.prepare(
                 r#"
                 select id, title, status, planned_date_key, source, created_at, updated_at,
-                       completed_at, archived_at, sort_order, metadata_json
+                       completed_at, archived_at, sort_order, session_key, metadata_json
                 from tasks
                 where status = 'backburner'
                   and planned_date_key is not null
                   and planned_date_key <= ?1
+                  and (?2 is null or session_key = ?2)
                 order by planned_date_key asc, sort_order asc, created_at asc
                 "#,
             )?;
-            stmt.query_map(params![key], map_task)?
+            stmt.query_map(params![key, session_key], map_task)?
                 .collect::<rusqlite::Result<Vec<_>>>()?
         };
         if due.is_empty() {
@@ -301,11 +330,11 @@ impl Repository {
         Ok(due.len())
     }
 
-    pub fn context(&mut self) -> Result<Context> {
-        let promoted = self.promote_due()?;
+    pub fn context_for(&mut self, session_key: Option<&str>) -> Result<Context> {
+        let promoted = self.promote_due_for(session_key)?;
         Ok(Context {
-            today: self.list(TaskStatus::Today)?,
-            backburner: self.list(TaskStatus::Backburner)?,
+            today: self.list_for_session(TaskStatus::Today, session_key)?,
+            backburner: self.list_for_session(TaskStatus::Backburner, session_key)?,
             promoted,
         })
     }
@@ -327,7 +356,7 @@ impl Repository {
             .query_row(
                 r#"
                 select id, title, status, planned_date_key, source, created_at, updated_at,
-                       completed_at, archived_at, sort_order, metadata_json
+                       completed_at, archived_at, sort_order, session_key, metadata_json
                 from tasks
                 where id = ?1
                 "#,
@@ -338,18 +367,36 @@ impl Repository {
             .map_err(Into::into)
     }
 
-    fn list_tasks_only(&self, status: TaskStatus) -> Result<Vec<Task>> {
+    fn list_tasks_only(&self, status: TaskStatus, session_key: Option<&str>) -> Result<Vec<Task>> {
         let mut stmt = self.conn.prepare(
             r#"
             select id, title, status, planned_date_key, source, created_at, updated_at,
-                   completed_at, archived_at, sort_order, metadata_json
+                   completed_at, archived_at, sort_order, session_key, metadata_json
             from tasks
             where status = ?1
+              and (?2 is null or session_key = ?2)
             order by planned_date_key is null, planned_date_key asc, sort_order asc, created_at asc
             "#,
         )?;
         Ok(stmt
-            .query_map(params![status.as_str()], map_task)?
+            .query_map(params![status.as_str(), session_key], map_task)?
+            .collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    fn completed_backburner_tasks(&self, session_key: Option<&str>) -> Result<Vec<Task>> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            select id, title, status, planned_date_key, source, created_at, updated_at,
+                   completed_at, archived_at, sort_order, session_key, metadata_json
+            from tasks
+            where status = 'backburner'
+              and completed_at is not null
+              and (?1 is null or session_key = ?1)
+            order by planned_date_key is null, planned_date_key asc, sort_order asc, created_at asc
+            "#,
+        )?;
+        Ok(stmt
+            .query_map(params![session_key], map_task)?
             .collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -458,7 +505,8 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         completed_at: row.get(7)?,
         archived_at: row.get(8)?,
         sort_order: row.get(9)?,
-        metadata_json: row.get(10)?,
+        session_key: row.get(10)?,
+        metadata_json: row.get(11)?,
     })
 }
 

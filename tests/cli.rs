@@ -116,6 +116,38 @@ fn done_and_finish_session_preserves_backburner_rules() {
 }
 
 #[test]
+fn finish_session_archives_completed_backburner_tasks() {
+    let dir = repo();
+    init(&dir);
+    bb(&dir)
+        .args(["add", "Deferred but done", "--backburner"])
+        .assert()
+        .success();
+
+    bb(&dir).args(["done", "1"]).assert().success();
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[x] #1 Deferred but done"));
+
+    let result = json_output(bb(&dir).args(["finish-session", "--json"]).assert());
+    assert_eq!(result["archived"], 1);
+    assert_eq!(result["backburnered"], 0);
+
+    bb(&dir)
+        .arg("archive")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Deferred but done"));
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing here."));
+}
+
+#[test]
 fn planned_backburner_tasks_promote_when_reading_today() {
     let dir = repo();
     init(&dir);
@@ -193,6 +225,100 @@ fn finish_day_remains_supported_as_alias() {
     let result = json_output(bb(&dir).args(["finish-day", "--json"]).assert());
     assert_eq!(result["archived"], 1);
     assert_eq!(result["backburnered"], 0);
+}
+
+#[test]
+fn session_pointer_scopes_add_list_and_finish_session() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .args(["session", "start", "refactor-auth"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Started session refactor-auth."));
+    bb(&dir)
+        .args(["add", "Session complete"])
+        .assert()
+        .success();
+    bb(&dir).args(["add", "Session carry"]).assert().success();
+
+    bb(&dir)
+        .args(["session", "end"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Ended session refactor-auth."));
+    bb(&dir).args(["add", "Global task"]).assert().success();
+
+    bb(&dir)
+        .args(["session", "start", "refactor-auth"])
+        .assert()
+        .success();
+    bb(&dir).args(["done", "1"]).assert().success();
+
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Session complete"))
+        .stdout(predicate::str::contains("#2 Session carry"))
+        .stdout(predicate::str::contains("Global task").not());
+
+    let result = json_output(bb(&dir).args(["finish-session", "--json"]).assert());
+    assert_eq!(result["archived"], 1);
+    assert_eq!(result["backburnered"], 1);
+
+    bb(&dir).args(["session", "end"]).assert().success();
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#3 Global task"))
+        .stdout(predicate::str::contains("Session carry").not());
+    bb(&dir)
+        .arg("backburner")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#2 Session carry"));
+}
+
+#[test]
+fn finish_session_argument_reconciles_that_session_regardless_of_pointer() {
+    let dir = repo();
+    init(&dir);
+
+    bb(&dir)
+        .args(["session", "start", "refactor-auth"])
+        .assert()
+        .success();
+    bb(&dir).args(["add", "Auth complete"]).assert().success();
+    bb(&dir).args(["done", "1"]).assert().success();
+
+    bb(&dir)
+        .args(["session", "start", "docs"])
+        .assert()
+        .success();
+    bb(&dir).args(["add", "Docs task"]).assert().success();
+
+    let result = json_output(
+        bb(&dir)
+            .args(["finish-session", "refactor-auth", "--json"])
+            .assert(),
+    );
+    assert_eq!(result["archived"], 1);
+    assert_eq!(result["backburnered"], 0);
+
+    bb(&dir)
+        .arg("today")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#2 Docs task"))
+        .stdout(predicate::str::contains("Auth complete").not());
+    bb(&dir)
+        .arg("archive")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#1 Auth complete"));
 }
 
 #[test]
@@ -569,7 +695,7 @@ fn help_describes_commands_and_options() {
             "add             Add a task to Today",
         ))
         .stdout(predicate::str::contains(
-            "finish-session  Archive completed Today tasks and defer unfinished ones",
+            "finish-session  Archive completed tasks and defer unfinished Today tasks",
         ))
         .stdout(predicate::str::contains(
             "undone          Mark a task incomplete and revive archived tasks",

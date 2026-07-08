@@ -11,7 +11,7 @@ use std::env;
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 
-use crate::cli::{Cli, Command};
+use crate::cli::{Cli, Command, SessionCommand};
 use crate::models::{TaskStatus, parse_plan};
 use crate::repository::{CreateTask, Repository, parse_file_ref};
 
@@ -67,6 +67,7 @@ fn run_project_command(command: Command) -> Result<()> {
     match command {
         Command::Add(args) => {
             let planned_date_key = args.plan.as_deref().map(parse_plan).transpose()?.flatten();
+            let active_session = settings::active_session(&root)?;
             let details = repository.create(CreateTask {
                 title: args.title,
                 status: if args.backburner {
@@ -75,6 +76,7 @@ fn run_project_command(command: Command) -> Result<()> {
                     TaskStatus::Today
                 },
                 planned_date_key,
+                session_key: active_session,
                 source: args.source.into(),
                 notes: args.notes,
                 files: args
@@ -92,8 +94,10 @@ fn run_project_command(command: Command) -> Result<()> {
             }
         }
         Command::Today(args) => {
-            repository.promote_due()?;
-            let tasks = repository.list(TaskStatus::Today)?;
+            let active_session = settings::active_session(&root)?;
+            repository.promote_due_for(active_session.as_deref())?;
+            let tasks =
+                repository.list_for_session(TaskStatus::Today, active_session.as_deref())?;
             if args.json {
                 output::json(&tasks)
             } else {
@@ -102,7 +106,9 @@ fn run_project_command(command: Command) -> Result<()> {
             }
         }
         Command::Backburner(args) => {
-            let tasks = repository.list(TaskStatus::Backburner)?;
+            let active_session = settings::active_session(&root)?;
+            let tasks =
+                repository.list_for_session(TaskStatus::Backburner, active_session.as_deref())?;
             if args.json {
                 output::json(&tasks)
             } else {
@@ -160,7 +166,9 @@ fn run_project_command(command: Command) -> Result<()> {
             Ok(())
         }
         Command::FinishSession(args) => {
-            let result = repository.finish_session()?;
+            let active_session = settings::active_session(&root)?;
+            let session = args.session.as_deref().or(active_session.as_deref());
+            let result = repository.finish_session_for(session)?;
             if args.json {
                 output::json(&result)
             } else {
@@ -169,7 +177,8 @@ fn run_project_command(command: Command) -> Result<()> {
             }
         }
         Command::Context(args) => {
-            let context = repository.context()?;
+            let active_session = settings::active_session(&root)?;
+            let context = repository.context_for(active_session.as_deref())?;
             if args.json {
                 output::json(&context)
             } else {
@@ -177,6 +186,20 @@ fn run_project_command(command: Command) -> Result<()> {
                 Ok(())
             }
         }
+        Command::Session(args) => match args.command {
+            SessionCommand::Start(args) => {
+                let name = settings::start_session(&root, &args.name)?;
+                println!("Started session {name}.");
+                Ok(())
+            }
+            SessionCommand::End => {
+                match settings::end_session(&root)? {
+                    Some(name) => println!("Ended session {name}."),
+                    None => println!("No active session."),
+                }
+                Ok(())
+            }
+        },
         Command::Init(_) | Command::Help(_) => unreachable!(),
     }
 }
@@ -228,6 +251,8 @@ Emoji aliases:
 Close a session:
   bb done 1
   bb finish-session
+  bb finish-session refactor-auth
+  bb session end
 
 Context:
   bb context --json"#

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::bail;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,8 @@ use crate::root;
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub last_rollover_date: String,
+    #[serde(default)]
+    pub active_session: Option<String>,
 }
 
 pub fn path(root: &Path) -> PathBuf {
@@ -23,6 +26,7 @@ pub fn init(root: &Path) -> Result<()> {
         root,
         &Settings {
             last_rollover_date: today_key(),
+            active_session: None,
         },
     )
 }
@@ -38,11 +42,31 @@ pub fn rollover_if_needed(root: &Path, repository: &mut Repository) -> Result<()
     Ok(())
 }
 
+pub fn active_session(root: &Path) -> Result<Option<String>> {
+    Ok(load_or_init(root)?.active_session)
+}
+
+pub fn start_session(root: &Path, name: &str) -> Result<String> {
+    let name = normalize_session_name(name)?;
+    let mut settings = load_or_init(root)?;
+    settings.active_session = Some(name.clone());
+    save(root, &settings)?;
+    Ok(name)
+}
+
+pub fn end_session(root: &Path) -> Result<Option<String>> {
+    let mut settings = load_or_init(root)?;
+    let previous = settings.active_session.take();
+    save(root, &settings)?;
+    Ok(previous)
+}
+
 fn load_or_init(root: &Path) -> Result<Settings> {
     let settings_path = path(root);
     if !settings_path.exists() {
         let settings = Settings {
             last_rollover_date: today_key(),
+            active_session: None,
         };
         save(root, &settings)?;
         return Ok(settings);
@@ -53,6 +77,14 @@ fn load_or_init(root: &Path) -> Result<Settings> {
     let settings = serde_json::from_str(&contents)
         .with_context(|| format!("could not parse {}", settings_path.display()))?;
     Ok(settings)
+}
+
+fn normalize_session_name(name: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("session name cannot be empty");
+    }
+    Ok(name.to_string())
 }
 
 fn save(root: &Path, settings: &Settings) -> Result<()> {
