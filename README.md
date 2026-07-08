@@ -42,17 +42,25 @@ Tomorrow starts with a clean Today.
 
 ## Install
 
+macOS and Linux:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rollingstorms/backburner/releases/latest/download/backburner-installer.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/rollingstorms/backburner/releases/latest/download/backburner-installer.ps1 | iex"
+```
+
+Rust users can also install from crates.io:
+
 ```sh
 cargo install backburner
 ```
 
 The installed binary is named `bb`.
-
-Or use the shell installer:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/rollingstorms/backburner/main/install.sh | sh
-```
 
 ### Developer Build
 

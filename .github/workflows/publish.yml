@@ -49,9 +49,23 @@ jobs:
       - name: Dry run publish
         run: cargo publish --dry-run --locked
 
+      - name: Check crates.io version
+        id: crates
+        shell: bash
+        run: |
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "backburner") | .version')"
+          if curl -fsS -o /dev/null "https://crates.io/api/v1/crates/backburner/${version}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "backburner ${version} already exists on crates.io; skipping publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate with crates.io
         id: auth
+        if: steps.crates.outputs.exists != 'true'
         uses: rust-lang/crates-io-auth-action@v1
 
       - name: Publish crate
+        if: steps.crates.outputs.exists != 'true'
         run: cargo publish --locked --token "${{ steps.auth.outputs.token }}"

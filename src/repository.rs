@@ -311,10 +311,10 @@ impl Repository {
         if due.is_empty() {
             return Ok(0);
         }
-        let mut next_today = self.next_sort_order(TaskStatus::Today)?;
+        let next_today = self.next_sort_order(TaskStatus::Today)?;
         let now = now_string();
         let tx = self.conn.transaction()?;
-        for task in &due {
+        for (next_today, task) in (next_today..).zip(&due) {
             tx.execute(
                 r#"
                 update tasks
@@ -324,7 +324,6 @@ impl Repository {
                 "#,
                 params![now, next_today, task.id],
             )?;
-            next_today += 1;
         }
         tx.commit()?;
         Ok(due.len())

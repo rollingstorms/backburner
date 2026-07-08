@@ -44,6 +44,7 @@ long-lived crates.io token stored in GitHub secrets.
    cargo clippy --all-targets --locked -- -D warnings
    cargo test --locked
    cargo publish --dry-run --locked
+   dist plan --allow-dirty
    ```
 
 4. Commit the version bump.
@@ -54,5 +55,12 @@ long-lived crates.io token stored in GitHub secrets.
    git push origin main --tags
    ```
 
-The `Publish` GitHub Actions workflow verifies that the tag matches
-`Cargo.toml`, reruns the checks, and publishes to crates.io.
+The tag starts two workflows:
+
+- `Publish` verifies that the tag matches `Cargo.toml`, reruns the checks, and
+  publishes to crates.io when that version does not already exist.
+- `Release` uses `cargo-dist` to create a GitHub Release with prebuilt `bb`
+  binaries, checksums, and shell/PowerShell installers.
+
+For `v0.1.0`, the crate already exists on crates.io. Pushing the tag will skip
+the crates.io upload and only create the binary release artifacts.
